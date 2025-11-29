@@ -21,12 +21,10 @@ def _init_cuda():
     max_retries = 5
     for attempt in range(max_retries):
         try:
+            # Just check availability - don't create contexts for each GPU
+            # Worker threads will create their own contexts
             if torch.cuda.is_available():
                 device_count = torch.cuda.device_count()
-                # Force full initialization by accessing device properties
-                for i in range(device_count):
-                    props = torch.cuda.get_device_properties(i)
-                    logger.info(f"GPU {i}: {props.name} ({props.total_memory // (1024**3)}GB)")
                 logger.info(f"CUDA initialized successfully with {device_count} GPUs")
                 return True
             else:
