@@ -5,46 +5,19 @@ import logging
 from typing import Dict, Any, List
 
 import runpod
-import torch
 
 # Add src to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
-
-# Configure logging early
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
-
-# Initialize CUDA at module load time (before any handler calls)
-# This prevents race conditions in RunPod containers
-def _init_cuda():
-    """Initialize CUDA with retry logic for RunPod containers."""
-    max_retries = 5
-    for attempt in range(max_retries):
-        try:
-            if torch.cuda.is_available():
-                device_count = torch.cuda.device_count()
-                # Initialize primary GPU context
-                torch.cuda.set_device(0)
-                torch.cuda.empty_cache()
-                logger.info(f"CUDA initialized successfully with {device_count} GPUs")
-                return True
-            else:
-                logger.warning(f"CUDA not available on attempt {attempt + 1}/{max_retries}")
-                time.sleep(1)
-        except Exception as e:
-            logger.warning(f"CUDA init error on attempt {attempt + 1}: {e}")
-            time.sleep(1)
-    logger.error("Failed to initialize CUDA after all retries")
-    return False
-
-# Run CUDA initialization
-_cuda_ready = _init_cuda()
 
 from pow.compute.gpu_group import create_gpu_groups, GpuGroup
 from pow.compute.autobs_v2 import get_batch_size_for_gpu_group
 from pow.compute.worker import ParallelWorkerManager
 from pow.compute.model_init import ModelWrapper
 from pow.models.utils import Params
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # Maximum job duration: 7 minutes
 MAX_JOB_DURATION = 7 * 60
@@ -100,11 +73,8 @@ def handler(event: Dict[str, Any]):
 
         params = Params(**params_dict)
 
-        # Check CUDA initialization
-        if not _cuda_ready:
-            raise RuntimeError("CUDA initialization failed - no GPU support available")
-
         # Auto-detect GPUs and create groups
+        import torch
         gpu_count = torch.cuda.device_count()
         logger.info(f"Detected {gpu_count} GPUs")
 
