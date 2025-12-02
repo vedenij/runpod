@@ -1,9 +1,14 @@
+import time
 from typing import List, Dict
 import torch
 from pow.models.utils import PARAMS_V1, PARAMS_V2, Params
 from common.logger import create_logger
 
 logger = create_logger(__name__)
+
+# Retry settings for CUDA availability check at startup
+CUDA_RETRY_ATTEMPTS = 5
+CUDA_RETRY_DELAY_SECONDS = 1.0
 
 
 class NotEnoughGPUResources(Exception):
@@ -70,10 +75,39 @@ class GpuGroup:
         return total_free_vram_mb / 1024
 
 
+def _wait_for_cuda_available() -> bool:
+    """
+    Wait for CUDA to become available with retry logic.
+    This is needed because CUDA may not be immediately available
+    when the RunPod container starts.
+
+    Returns:
+        True if CUDA became available, False otherwise
+    """
+    for attempt in range(CUDA_RETRY_ATTEMPTS):
+        if torch.cuda.is_available():
+            if attempt > 0:
+                logger.info(f"CUDA became available after {attempt + 1} attempts")
+            return True
+
+        if attempt < CUDA_RETRY_ATTEMPTS - 1:
+            logger.warning(
+                f"CUDA not available (attempt {attempt + 1}/{CUDA_RETRY_ATTEMPTS}), "
+                f"waiting {CUDA_RETRY_DELAY_SECONDS}s..."
+            )
+            try:
+                torch.cuda.empty_cache()
+            except Exception:
+                pass
+            time.sleep(CUDA_RETRY_DELAY_SECONDS)
+
+    return False
+
+
 def create_gpu_groups(min_vram_gb: float = None, params: Params = None) -> List[GpuGroup]:
 
-    if not torch.cuda.is_available():
-        error_msg = "CUDA is not available - no GPU support detected"
+    if not _wait_for_cuda_available():
+        error_msg = "CUDA is not available - no GPU support detected after retries"
         logger.error(error_msg)
         raise NotEnoughGPUResources(error_msg)
 
