@@ -107,7 +107,7 @@ def _wait_for_cuda_available() -> bool:
 def create_gpu_groups(min_vram_gb: float = None, params: Params = None) -> List[GpuGroup]:
 
     if not _wait_for_cuda_available():
-        error_msg = "CUDA is not available - no GPU support detected after retries"
+        error_msg = "CUDA is not available - no GPU support detected"
         logger.error(error_msg)
         raise NotEnoughGPUResources(error_msg)
 

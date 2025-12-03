@@ -9,7 +9,7 @@ import runpod
 # Add src to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
 
-from pow.compute.gpu_group import create_gpu_groups, GpuGroup
+from pow.compute.gpu_group import create_gpu_groups, GpuGroup, NotEnoughGPUResources
 from pow.compute.autobs_v2 import get_batch_size_for_gpu_group
 from pow.compute.worker import ParallelWorkerManager
 from pow.compute.model_init import ModelWrapper
@@ -215,6 +215,19 @@ def handler(event: Dict[str, Any]):
             torch.cuda.empty_cache()
         except:
             pass
+    except NotEnoughGPUResources as e:
+        # CUDA/GPU initialization failed - kill worker so RunPod restarts it on different machine
+        logger.error(f"GPU INIT FAILED: {str(e)}")
+        logger.error("Terminating worker - RunPod will restart on different machine")
+        yield {
+            "error": str(e),
+            "error_type": "NotEnoughGPUResources",
+            "fatal": True,
+        }
+        # Give RunPod time to receive the error before killing
+        time.sleep(1)
+        sys.exit(1)  # Kill worker - RunPod will create new one on different machine
+
     except Exception as e:
         logger.error(f"ERROR: {str(e)}", exc_info=True)
         yield {
